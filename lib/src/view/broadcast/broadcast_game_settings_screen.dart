@@ -54,12 +54,6 @@ class const BroadcastGameSettingsScreen(
                 onChanged: (value) =>
                     ref.read(broadcastPreferencesProvider.notifier).toggleShowEngineLines(),
               ),
-              SwitchSettingTile(
-                title: Text(context.l10n.mobileSmallBoard),
-                value: broadcastPrefs.smallBoard,
-                onChanged: (value) =>
-                    ref.read(broadcastPreferencesProvider.notifier).toggleSmallBoard(),
-              ),
               ListTile(
                 title: Text(context.l10n.openingExplorer),
                 onTap: () => showModalBottomSheet<void>(

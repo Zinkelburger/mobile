@@ -264,7 +264,8 @@ class const _Body(
               boardSize: boardSize,
               boardRadius: borderRadius,
             ),
-            smallBoard: broadcastPrefs.smallBoard,
+            boardScale: broadcastPrefs.boardScale,
+            onBoardScaleChanged: ref.read(broadcastPreferencesProvider.notifier).setBoardScale,
             boardHeader: _PlayerWidget(
               tournamentId: tournamentId,
               roundId: roundId,

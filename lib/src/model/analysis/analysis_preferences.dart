@@ -56,8 +56,8 @@ class AnalysisPreferences() extends Notifier<AnalysisPrefs> with PreferencesStor
     return save(state.copyWith(inlineNotation: !state.inlineNotation));
   }
 
-  Future<void> toggleSmallBoard() {
-    return save(state.copyWith(smallBoard: !state.smallBoard));
+  Future<void> setBoardScale(double boardScale) {
+    return save(state.copyWith(boardScale: boardScale));
   }
 }
 
@@ -73,7 +73,7 @@ sealed class const AnalysisPrefs._()
     required bool showAnnotations,
     required bool showPgnComments,
     @JsonKey(defaultValue: false) required bool inlineNotation,
-    @JsonKey(defaultValue: false) required bool smallBoard,
+    @JsonKey(readValue: readBoardScale) required double boardScale,
   }) = _AnalysisPrefs;
 
   static const defaults = AnalysisPrefs(
@@ -84,7 +84,7 @@ sealed class const AnalysisPrefs._()
     showAnnotations: true,
     showPgnComments: true,
     inlineNotation: false,
-    smallBoard: false,
+    boardScale: 1.0,
   );
 
   factory fromJson(Map<String, dynamic> json) {

@@ -5,6 +5,7 @@ import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lichess_mobile/src/constants.dart';
+import 'package:lichess_mobile/src/model/analysis/common_analysis_prefs.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
 import 'package:lichess_mobile/src/model/settings/preferences_storage.dart';
 import 'package:lichess_mobile/src/view/analysis/analysis_layout.dart';
@@ -178,4 +179,93 @@ void main() {
       );
     }
   }, variant: kPlatformVariant);
+
+  group('board resize handle', () {
+    const surface = Size(390, 844);
+    final handle = find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.label == 'Board size',
+    );
+
+    Future<Widget> makeLayout(
+      WidgetTester tester, {
+      required double boardScale,
+      ValueChanged<double>? onBoardScaleChanged,
+    }) {
+      return makeTestProviderScope(
+        tester,
+        surfaceSize: surface,
+        child: MaterialApp(
+          home: DefaultTabController(
+            length: 1,
+            child: AnalysisLayout(
+              pov: Side.white,
+              sideToMove: Side.white,
+              boardScale: boardScale,
+              onBoardScaleChanged: onBoardScaleChanged,
+              boardBuilder: (context, boardSize, boardRadius) =>
+                  StaticChessboard(size: boardSize, fen: kInitialFEN, orientation: Side.white),
+              children: const [Center(child: Text('Analysis tab'))],
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('is hidden when the board cannot be resized', (tester) async {
+      await tester.pumpWidget(await makeLayout(tester, boardScale: 1.0));
+
+      expect(handle, findsNothing);
+    });
+
+    testWidgets('dragging up shrinks the board and reports the scale once released', (
+      tester,
+    ) async {
+      final reported = <double>[];
+      await tester.pumpWidget(
+        await makeLayout(tester, boardScale: 1.0, onBoardScaleChanged: reported.add),
+      );
+
+      expect(tester.getSize(find.byType(StaticChessboard)).width, surface.width);
+
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      // move past the drag slop first, so the following moves translate 1:1 into board size
+      await gesture.moveBy(const Offset(0, -20));
+      await gesture.moveBy(const Offset(0, -78));
+      await tester.pump();
+
+      // the board follows the finger during the drag, without saving anything yet
+      expect(tester.getSize(find.byType(StaticChessboard)).width, lessThan(surface.width));
+      expect(reported, isEmpty);
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(reported, hasLength(1));
+      expect(reported.single, lessThan(1.0));
+      expect(reported.single, greaterThan(kMinBoardScale));
+    });
+
+    testWidgets('cannot shrink the board below the minimum scale', (tester) async {
+      final reported = <double>[];
+      await tester.pumpWidget(
+        await makeLayout(tester, boardScale: 1.0, onBoardScaleChanged: reported.add),
+      );
+
+      await tester.drag(handle, const Offset(0, -600));
+      await tester.pump();
+
+      expect(reported.single, kMinBoardScale);
+    });
+
+    testWidgets('renders the board at the given scale', (tester) async {
+      await tester.pumpWidget(
+        await makeLayout(tester, boardScale: kSmallBoardScale, onBoardScaleChanged: (_) {}),
+      );
+
+      expect(
+        tester.getSize(find.byType(StaticChessboard)).width,
+        moreOrLessEquals(surface.width * kSmallBoardScale),
+      );
+    });
+  });
 }

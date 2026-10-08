@@ -237,7 +237,8 @@ class const _Body({
         sideToMove: analysisState.currentPosition.turn,
         boardBuilder: (context, boardSize, borderRadius) =>
             GameAnalysisBoard(options: options, boardSize: boardSize, boardRadius: borderRadius),
-        smallBoard: analysisPrefs.smallBoard,
+        boardScale: analysisPrefs.boardScale,
+        onBoardScaleChanged: ref.read(analysisPreferencesProvider.notifier).setBoardScale,
         boardHeader: boardHeader,
         boardFooter: boardFooter,
         engineGaugeBuilder: showEvaluationGauge && analysisState.hasAvailableEval(enginePrefs)

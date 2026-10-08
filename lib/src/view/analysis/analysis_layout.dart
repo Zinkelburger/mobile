@@ -1,8 +1,10 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lichess_mobile/l10n/l10n.dart';
 import 'package:lichess_mobile/src/constants.dart';
+import 'package:lichess_mobile/src/model/analysis/common_analysis_prefs.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
 import 'package:lichess_mobile/src/styles/lichess_icons.dart';
 import 'package:lichess_mobile/src/styles/styles.dart';
@@ -14,9 +16,6 @@ import 'package:material_ui/material_ui.dart';
 
 /// The height of the board header or footer in the analysis layout.
 const kAnalysisBoardHeaderOrFooterHeight = 26.0;
-
-/// Scale factor for the small board in portrait orientation.
-const kSmallBoardScale = 0.8;
 
 typedef BoardBuilder = Widget Function(
   BuildContext context,
@@ -104,10 +103,14 @@ class const AnalysisLayout({
   /// A widget to show at the bottom of the screen.
   final Widget? bottomBar,
 
-  /// If true, the board is displayed in a small size on portrait orientation.
+  /// The size of the board in portrait orientation, as a fraction of its full size.
+  final double boardScale = 1.0,
+
+  /// Called with the new [boardScale] when the user resizes the board with the handle at the top
+  /// of the tab view.
   ///
-  /// This is `false` by default.
-  final bool smallBoard = false,
+  /// If null, the board cannot be resized.
+  final ValueChanged<double>? onBoardScaleChanged,
 
   /// Current state of the pockets, in variants like crazyhouse.
   ///
@@ -273,121 +276,135 @@ class const AnalysisLayout({
                   final evalGaugeSize = engineGaugeBuilder != null
                       ? getEvalGaugeWidth(context)
                       : 0.0;
+                  final fullBoardSize = constraints.biggest.shortestSide - evalGaugeSize;
 
-                  final defaultBoardSize =
-                      (smallBoard ? kSmallBoardScale : 1.0) *
-                      (constraints.biggest.shortestSide - evalGaugeSize);
+                  return _BoardResizer(
+                    boardScale: boardScale,
+                    onBoardScaleChanged: onBoardScaleChanged,
+                    fullBoardSize: fullBoardSize,
+                    builder: (context, scale, headerBuilder) {
+                      final defaultBoardSize = scale * fullBoardSize;
 
-                  final remainingHeight = constraints.maxHeight - defaultBoardSize;
-                  final isSmallScreen = remainingHeight < kSmallHeightMinusBoard;
-                  final additionalBoardSidePaddingForPockets = isSmallScreen ? 70.0 : 16.0;
+                      // Measured with the full size board, so that the pockets padding does not
+                      // jump while the board is being resized.
+                      final remainingHeight = constraints.maxHeight - fullBoardSize;
+                      final isSmallScreen = remainingHeight < kSmallHeightMinusBoard;
+                      final additionalBoardSidePaddingForPockets = isSmallScreen ? 70.0 : 16.0;
 
-                  final boardSize =
-                      defaultBoardSize -
-                      (isTablet ? kTabletBoardTableSidePadding * 2 : 0) -
-                      (pockets != null ? additionalBoardSidePaddingForPockets : 0.0);
+                      final boardSize =
+                          defaultBoardSize -
+                          (isTablet ? kTabletBoardTableSidePadding * 2 : 0) -
+                          (pockets != null ? additionalBoardSidePaddingForPockets : 0.0);
 
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      ?engineLines,
-                      Padding(
-                        padding: isTablet
-                            ? const EdgeInsets.all(kTabletBoardTableSidePadding)
-                            : EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            if (pockets != null)
-                              PocketsMenu(
-                                side: pov.opposite,
-                                sideToMove: sideToMove,
-                                playerSide: playerSide,
-                                pockets: pockets!,
-                                squareSize: pocketSquareSize(
-                                  boardSize: boardSize,
-                                  isTablet: isTablet,
-                                ),
-                              ),
-                            if (boardHeader != null)
-                              // This key is used to preserve the state of the board header when the pov changes
-                              Container(
-                                key: ValueKey(pov.opposite),
-                                decoration: BoxDecoration(
-                                  borderRadius: isTablet
-                                      ? tabletBoardRadius.copyWith(
-                                          bottomLeft: Radius.zero,
-                                          bottomRight: Radius.zero,
-                                        )
-                                      : null,
-                                ),
-                                clipBehavior: isTablet ? Clip.hardEdge : Clip.none,
-                                height: kAnalysisBoardHeaderOrFooterHeight,
-                                child: boardHeader,
-                              ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.max,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          ?engineLines,
+                          Padding(
+                            padding: isTablet
+                                ? const EdgeInsets.all(kTabletBoardTableSidePadding)
+                                : EdgeInsets.zero,
+                            child: Column(
                               children: [
-                                boardBuilder(
-                                  context,
-                                  boardSize,
-                                  isTablet && boardHeader == null && boardFooter != null
-                                      ? tabletBoardRadius
-                                      : null,
+                                if (pockets != null)
+                                  PocketsMenu(
+                                    side: pov.opposite,
+                                    sideToMove: sideToMove,
+                                    playerSide: playerSide,
+                                    pockets: pockets!,
+                                    squareSize: pocketSquareSize(
+                                      boardSize: boardSize,
+                                      isTablet: isTablet,
+                                    ),
+                                  ),
+                                if (boardHeader != null)
+                                  // This key is used to preserve the state of the board header when the pov changes
+                                  Container(
+                                    key: ValueKey(pov.opposite),
+                                    decoration: BoxDecoration(
+                                      borderRadius: isTablet
+                                          ? tabletBoardRadius.copyWith(
+                                              bottomLeft: Radius.zero,
+                                              bottomRight: Radius.zero,
+                                            )
+                                          : null,
+                                    ),
+                                    clipBehavior: isTablet ? Clip.hardEdge : Clip.none,
+                                    height: kAnalysisBoardHeaderOrFooterHeight,
+                                    child: boardHeader,
+                                  ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    boardBuilder(
+                                      context,
+                                      boardSize,
+                                      isTablet && boardHeader == null && boardFooter != null
+                                          ? tabletBoardRadius
+                                          : null,
+                                    ),
+                                    if (engineGaugeBuilder != null)
+                                      SizedBox(
+                                        height: boardSize,
+                                        child: engineGaugeBuilder!(context),
+                                      ),
+                                  ],
                                 ),
-                                if (engineGaugeBuilder != null)
-                                  SizedBox(height: boardSize, child: engineGaugeBuilder!(context)),
+                                if (boardFooter != null)
+                                  Container(
+                                    // This key is used to preserve the state of the board footer when the pov changes
+                                    key: ValueKey(pov),
+                                    decoration: BoxDecoration(
+                                      borderRadius: isTablet
+                                          ? tabletBoardRadius.copyWith(
+                                              topLeft: Radius.zero,
+                                              topRight: Radius.zero,
+                                            )
+                                          : null,
+                                    ),
+                                    clipBehavior: isTablet ? Clip.hardEdge : Clip.none,
+                                    height: kAnalysisBoardHeaderOrFooterHeight,
+                                    child: boardFooter,
+                                  ),
+                                if (pockets != null)
+                                  PocketsMenu(
+                                    side: pov,
+                                    sideToMove: sideToMove,
+                                    playerSide: playerSide,
+                                    pockets: pockets!,
+                                    squareSize: pocketSquareSize(
+                                      boardSize: boardSize,
+                                      isTablet: isTablet,
+                                    ),
+                                  ),
                               ],
                             ),
-                            if (boardFooter != null)
-                              Container(
-                                // This key is used to preserve the state of the board footer when the pov changes
-                                key: ValueKey(pov),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: isTablet
+                                  ? const EdgeInsets.symmetric(
+                                      horizontal: kTabletBoardTableSidePadding,
+                                    )
+                                  : EdgeInsets.zero,
+                              child: Container(
                                 decoration: BoxDecoration(
-                                  borderRadius: isTablet
-                                      ? tabletBoardRadius.copyWith(
-                                          topLeft: Radius.zero,
-                                          topRight: Radius.zero,
-                                        )
-                                      : null,
+                                  color: ColorScheme.of(context).surfaceContainerLowest,
                                 ),
-                                clipBehavior: isTablet ? Clip.hardEdge : Clip.none,
-                                height: kAnalysisBoardHeaderOrFooterHeight,
-                                child: boardFooter,
-                              ),
-                            if (pockets != null)
-                              PocketsMenu(
-                                side: pov,
-                                sideToMove: sideToMove,
-                                playerSide: playerSide,
-                                pockets: pockets!,
-                                squareSize: pocketSquareSize(
-                                  boardSize: boardSize,
-                                  isTablet: isTablet,
+                                child: _AnalysisTabView(
+                                  tabs: tabs,
+                                  controller: tabController,
+                                  headerBuilder: headerBuilder,
+                                  children: children,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: isTablet
-                              ? const EdgeInsets.symmetric(horizontal: kTabletBoardTableSidePadding)
-                              : EdgeInsets.zero,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: ColorScheme.of(context).surfaceContainerLowest,
-                            ),
-                            child: _AnalysisTabView(
-                              tabs: tabs,
-                              controller: tabController,
-                              children: children,
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   );
                 }
               },
@@ -400,19 +417,152 @@ class const AnalysisLayout({
   }
 }
 
+/// How much the board scale changes with the accessibility increase and decrease actions.
+const _kBoardScaleStep = 0.1;
+
+double _stepBoardScale(double scale, double delta) => (scale + delta).clamp(kMinBoardScale, 1.0);
+
+String _percent(double scale) => '${(scale * 100).round()}%';
+
+/// Builds the header of the tab view around the [tabBar], if any.
+typedef _TabViewHeaderBuilder = Widget Function(Widget? tabBar);
+
+/// Holds the board scale while the user drags the resize handle, and reports it once the drag ends
+/// so that preferences are not written on every frame.
+class const _BoardResizer({
+  required final double boardScale,
+  required final ValueChanged<double>? onBoardScaleChanged,
+  required final double fullBoardSize,
+  required final Widget Function(
+    BuildContext context,
+    double boardScale,
+    _TabViewHeaderBuilder? headerBuilder,
+  )
+  builder,
+}) extends StatefulWidget {
+  @override
+  State<_BoardResizer> createState() => _BoardResizerState();
+}
+
+class _BoardResizerState() extends State<_BoardResizer> {
+  /// The scale being dragged to, or null when no drag is in progress.
+  double? _dragScale;
+
+  double get _scale => _dragScale ?? widget.boardScale;
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    final scale = _stepBoardScale(_scale, details.primaryDelta! / widget.fullBoardSize);
+    if (scale == _scale) return;
+    if (scale == kMinBoardScale || scale == 1.0) HapticFeedback.selectionClick();
+    setState(() => _dragScale = scale);
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    final scale = _dragScale;
+    if (scale == null) return;
+    widget.onBoardScaleChanged!(scale);
+    setState(() => _dragScale = null);
+  }
+
+  void _step(double delta) {
+    widget.onBoardScaleChanged!(_stepBoardScale(_scale, delta));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(
+      context,
+      _scale,
+      widget.onBoardScaleChanged == null
+          ? null
+          : (tabBar) => _BoardResizeHandle(
+              boardScale: _scale,
+              isDragging: _dragScale != null,
+              onDragUpdate: _onDragUpdate,
+              onDragEnd: _onDragEnd,
+              onIncrease: () => _step(_kBoardScaleStep),
+              onDecrease: () => _step(-_kBoardScaleStep),
+              tabBar: tabBar,
+            ),
+    );
+  }
+}
+
+/// A grab handle on top of the tab view: dragging it up shrinks the board and makes room for the
+/// tabs, like pulling up a bottom sheet.
+///
+/// The whole header, tab bar included, reacts to vertical drags so the touch target stays large
+/// while the visible handle stays slim.
+class const _BoardResizeHandle({
+  required final double boardScale,
+  required final bool isDragging,
+  required final GestureDragUpdateCallback onDragUpdate,
+  required final GestureDragEndCallback onDragEnd,
+  required final VoidCallback onIncrease,
+  required final VoidCallback onDecrease,
+  required final Widget? tabBar,
+}) extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = ColorScheme.of(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: onDragUpdate,
+      onVerticalDragEnd: onDragEnd,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeRow,
+        child: ColoredBox(
+          color: colorScheme.surface,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                slider: true,
+                label: 'Board size',
+                value: _percent(boardScale),
+                increasedValue: _percent(_stepBoardScale(boardScale, _kBoardScaleStep)),
+                decreasedValue: _percent(_stepBoardScale(boardScale, -_kBoardScaleStep)),
+                onIncrease: boardScale < 1.0 ? onIncrease : null,
+                onDecrease: boardScale > kMinBoardScale ? onDecrease : null,
+                child: SizedBox(
+                  height: 14.0,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOut,
+                      width: isDragging ? 40.0 : 32.0,
+                      height: 4.0,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: isDragging ? 0.8 : 0.4,
+                        ),
+                        borderRadius: BorderRadius.circular(2.0),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              ?tabBar,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class const _AnalysisTabView({
   required final List<AnalysisTab>? tabs,
   required final TabController? controller,
+  final _TabViewHeaderBuilder? headerBuilder,
   required final List<Widget> children,
 }) extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const iconSize = 18.0;
 
-    return Column(
-      children: [
-        if (tabs != null && tabs!.length > 1)
-          Container(
+    final tabBar = tabs != null && tabs!.length > 1
+        ? Container(
             decoration: BoxDecoration(color: ColorScheme.of(context).surface),
             child: TabBar(
               controller: controller,
@@ -428,7 +578,12 @@ class const _AnalysisTabView({
                   )
                   .toList(),
             ),
-          ),
+          )
+        : null;
+
+    return Column(
+      children: [
+        if (headerBuilder != null) headerBuilder!(tabBar) else ?tabBar,
         Expanded(
           child: TabBarView(controller: controller, children: children),
         ),

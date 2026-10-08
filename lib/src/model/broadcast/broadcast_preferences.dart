@@ -63,8 +63,8 @@ class BroadcastPreferences()
     return save(state.copyWith(inlineNotation: !state.inlineNotation));
   }
 
-  Future<void> toggleSmallBoard() {
-    return save(state.copyWith(smallBoard: !state.smallBoard));
+  Future<void> setBoardScale(double boardScale) {
+    return save(state.copyWith(boardScale: boardScale));
   }
 }
 
@@ -79,7 +79,7 @@ sealed class BroadcastPrefs with _$BroadcastPrefs implements Serializable, Commo
     @JsonKey(defaultValue: true) required bool showAnnotations,
     @JsonKey(defaultValue: true) required bool showPgnComments,
     @JsonKey(defaultValue: false) required bool inlineNotation,
-    @JsonKey(defaultValue: false) required bool smallBoard,
+    @JsonKey(readValue: readBoardScale) required double boardScale,
   }) = _BroadcastPrefs;
 
   static const defaults = BroadcastPrefs(
@@ -91,7 +91,7 @@ sealed class BroadcastPrefs with _$BroadcastPrefs implements Serializable, Commo
     showAnnotations: true,
     showPgnComments: true,
     inlineNotation: false,
-    smallBoard: false,
+    boardScale: 1.0,
   );
 
   factory fromJson(Map<String, dynamic> json) => _$BroadcastPrefsFromJson(json);

@@ -11,6 +11,7 @@ import 'package:lichess_mobile/src/constants.dart';
 import 'package:lichess_mobile/src/model/account/account_repository.dart';
 import 'package:lichess_mobile/src/model/account/ongoing_games_notifier.dart';
 import 'package:lichess_mobile/src/model/analysis/analysis_preferences.dart';
+import 'package:lichess_mobile/src/model/analysis/common_analysis_prefs.dart';
 import 'package:lichess_mobile/src/model/broadcast/broadcast_preferences.dart';
 import 'package:lichess_mobile/src/model/common/preloaded_data.dart';
 import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
@@ -102,28 +103,28 @@ class _AppState() extends ConsumerState<Application> {
     // For tablets in portrait mode using the full board size makes the bottom analysis tabs tiny,
     // see https://github.com/lichess-org/mobile/issues/3150,
     // so use a small board there by default as well.
-    final smallBoard = isTablet || isSmallScreen;
+    final boardScale = isTablet || isSmallScreen ? kSmallBoardScale : 1.0;
 
     await ref
         .read(analysisPreferencesProvider.notifier)
         .save(
           ref
               .read(analysisPreferencesProvider)
-              .copyWith(smallBoard: smallBoard, showEngineLines: showEngineLines),
+              .copyWith(boardScale: boardScale, showEngineLines: showEngineLines),
         );
     await ref
         .read(studyPreferencesProvider.notifier)
         .save(
           ref
               .read(studyPreferencesProvider)
-              .copyWith(smallBoard: smallBoard, showEngineLines: showEngineLines),
+              .copyWith(boardScale: boardScale, showEngineLines: showEngineLines),
         );
     await ref
         .read(broadcastPreferencesProvider.notifier)
         .save(
           ref
               .read(broadcastPreferencesProvider)
-              .copyWith(smallBoard: smallBoard, showEngineLines: showEngineLines),
+              .copyWith(boardScale: boardScale, showEngineLines: showEngineLines),
         );
 
     await prefs.setBool(kDoneScreenSizeInitKey, true);
