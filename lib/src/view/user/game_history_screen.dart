@@ -22,6 +22,7 @@ import 'package:lichess_mobile/src/view/game/game_list_detail_tile.dart';
 import 'package:lichess_mobile/src/view/game/game_list_tile.dart';
 import 'package:lichess_mobile/src/view/game/game_screen.dart';
 import 'package:lichess_mobile/src/view/game/game_screen_providers.dart';
+import 'package:lichess_mobile/src/view/play/challenge_confirmation_dialog.dart';
 import 'package:lichess_mobile/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:lichess_mobile/src/widgets/buttons.dart';
 import 'package:lichess_mobile/src/widgets/feedback.dart';
@@ -299,7 +300,7 @@ class _BodyState() extends ConsumerState<_Body> {
                                       backgroundColor: ColorScheme.of(context).primary,
                                       foregroundColor: ColorScheme.of(context).onPrimary,
                                       onPressed: opponent.user != null
-                                          ? (_) {
+                                          ? (_) async {
                                               final request = ChallengeRequest(
                                                 destUser: opponent.user,
                                                 variant: game.variant,
@@ -314,6 +315,10 @@ class _BodyState() extends ConsumerState<_Body> {
                                                     : null,
                                                 days: game.daysPerTurn,
                                               );
+                                              if (!await confirmChallenge(context, request)) {
+                                                return;
+                                              }
+                                              if (!context.mounted) return;
                                               final source = UserChallengeSource(request);
                                               ref.invalidate(gameScreenLoaderProvider(source));
                                               Navigator.of(

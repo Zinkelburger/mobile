@@ -16,6 +16,7 @@ import 'package:lichess_mobile/src/utils/l10n_context.dart';
 import 'package:lichess_mobile/src/utils/navigation.dart';
 import 'package:lichess_mobile/src/view/game/game_screen.dart';
 import 'package:lichess_mobile/src/view/game/game_screen_providers.dart';
+import 'package:lichess_mobile/src/view/play/challenge_confirmation_dialog.dart';
 import 'package:lichess_mobile/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:lichess_mobile/src/widgets/adaptive_choice_picker.dart';
 import 'package:lichess_mobile/src/widgets/board_preview.dart';
@@ -301,16 +302,17 @@ class _CreateChallengeBottomSheetState() extends ConsumerState<CreateChallengeBo
                   child: FilledButton(
                     onPressed: timeControl == ChallengeTimeControlType.clock || widget.user == null
                         ? isValidTimeControl && isValidPosition
-                              ? () {
-                                  final source = UserChallengeSource(
-                                    preferences.makeRequest(
-                                      account,
-                                      widget.user,
-                                      preferences.variant != Variant.fromPosition
-                                          ? null
-                                          : fromPositionFenInput,
-                                    ),
+                              ? () async {
+                                  final request = preferences.makeRequest(
+                                    account,
+                                    widget.user,
+                                    preferences.variant != Variant.fromPosition
+                                        ? null
+                                        : fromPositionFenInput,
                                   );
+                                  if (!await confirmChallenge(context, request)) return;
+                                  if (!context.mounted) return;
+                                  final source = UserChallengeSource(request);
                                   // Invalidate any stale provider state from a previous game
                                   // with the same source (same opponent + settings), so the
                                   // new GameScreen always runs build() and creates a fresh
@@ -328,17 +330,18 @@ class _CreateChallengeBottomSheetState() extends ConsumerState<CreateChallengeBo
                               : null
                         : snapshot.connectionState != ConnectionState.waiting
                         ? () async {
+                            final request = preferences.makeRequest(
+                              account,
+                              widget.user,
+                              preferences.variant != Variant.fromPosition
+                                  ? null
+                                  : fromPositionFenInput,
+                            );
+                            if (!await confirmChallenge(context, request)) return;
+                            if (!context.mounted) return;
                             setState(() {
                               _pendingCorrespondenceChallenge = createGameService
-                                  .newCorrespondenceChallenge(
-                                    preferences.makeRequest(
-                                      account,
-                                      widget.user,
-                                      preferences.variant != Variant.fromPosition
-                                          ? null
-                                          : fromPositionFenInput,
-                                    ),
-                                  );
+                                  .newCorrespondenceChallenge(request);
                             });
 
                             try {

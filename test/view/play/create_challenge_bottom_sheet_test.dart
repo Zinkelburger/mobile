@@ -9,6 +9,7 @@ import 'package:lichess_mobile/src/model/settings/preferences_storage.dart';
 import 'package:lichess_mobile/src/model/user/user.dart';
 import 'package:lichess_mobile/src/network/http.dart';
 import 'package:lichess_mobile/src/view/game/game_screen.dart';
+import 'package:lichess_mobile/src/view/play/challenge_confirmation_dialog.dart';
 import 'package:lichess_mobile/src/view/play/create_challenge_bottom_sheet.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -21,6 +22,7 @@ import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
 
 const _testDestUser = LightUser(id: UserId('targetuser'), name: 'TargetUser');
+const _testBotUser = LightUser(id: UserId('somebot'), name: 'SomeBot', title: 'BOT');
 const _correspondenceChallengeId = 'corrId123456';
 const _clockChallengeId = 'clockId12345';
 
@@ -53,10 +55,77 @@ void main() {
         await tester.tap(find.text('Challenge ${_testDestUser.name}'));
         await tester.pumpAndSettle();
 
+        expect(find.byType(ChallengeConfirmationDialog), findsOneWidget);
+        await tester.tap(find.text('Send challenge'));
+        await tester.pumpAndSettle();
+
         // the bottom sheet should be gone
         expect(find.byType(CreateChallengeBottomSheet), findsNothing);
 
         // GameScreen should be pushed (loading state is fine)
+        expect(find.byType(GameScreen), findsOneWidget);
+      }, variant: kPlatformVariant);
+
+      testWidgets('cancelling the confirmation keeps the sheet open and sends nothing', (
+        tester,
+      ) async {
+        var challengeRequests = 0;
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: TestBottomSheetOpener(builder: _makeBottomSheetBuilder(user: _testDestUser)),
+          overrides: {
+            httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+              (ref) => FakeHttpClientFactory(
+                () => _makeClockMockClient(onChallengeCreated: () => challengeRequests++),
+              ),
+            ),
+          },
+          authUser: fakeAuthUser,
+        );
+
+        await tester.pumpWidget(app);
+        await tester.pump(const Duration(milliseconds: 50));
+
+        await TestBottomSheetOpener.openBottomSheet(tester);
+
+        await tester.tap(find.text('Challenge ${_testDestUser.name}'));
+        await tester.pumpAndSettle();
+
+        final dialog = find.byType(ChallengeConfirmationDialog);
+        expect(dialog, findsOneWidget);
+        // the dialog spells out the terms of the challenge
+        expect(find.descendant(of: dialog, matching: find.textContaining('Rated')), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ChallengeConfirmationDialog), findsNothing);
+        expect(find.byType(CreateChallengeBottomSheet), findsOneWidget);
+        expect(find.byType(GameScreen), findsNothing);
+        expect(challengeRequests, 0);
+      }, variant: kPlatformVariant);
+
+      testWidgets('challenging a bot does not ask for confirmation', (tester) async {
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: TestBottomSheetOpener(builder: _makeBottomSheetBuilder(user: _testBotUser)),
+          overrides: {
+            httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+              (ref) => FakeHttpClientFactory(() => _makeClockMockClient()),
+            ),
+          },
+          authUser: fakeAuthUser,
+        );
+
+        await tester.pumpWidget(app);
+        await tester.pump(const Duration(milliseconds: 50));
+
+        await TestBottomSheetOpener.openBottomSheet(tester);
+
+        await tester.tap(find.text('Challenge ${_testBotUser.name}'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ChallengeConfirmationDialog), findsNothing);
         expect(find.byType(GameScreen), findsOneWidget);
       }, variant: kPlatformVariant);
     });
@@ -92,6 +161,8 @@ void main() {
 
         // tap challenge button
         await tester.tap(find.text('Challenge ${_testDestUser.name}'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Send challenge'));
         await tester.pump(); // start the async challenge creation
 
         // let the HTTP request for challenge creation complete
@@ -178,6 +249,8 @@ void main() {
 
         // tap challenge button
         await tester.tap(find.text('Challenge ${_testDestUser.name}'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Send challenge'));
         await tester.pump();
 
         // let the HTTP request for challenge creation complete
@@ -212,12 +285,14 @@ WidgetBuilder _makeBottomSheetBuilder({required LightUser? user}) {
   return (_) => CreateChallengeBottomSheet(user: user);
 }
 
-MockClient _makeClockMockClient() => MockClient((request) {
+MockClient _makeClockMockClient({void Function()? onChallengeCreated}) => MockClient((request) {
   if (request.url.path == '/api/account') {
     return mockResponse(mockApiAccountResponse(fakeAuthUser.user.name), 200);
   }
   // challenge creation endpoint (called by GameScreen's newRealTimeChallenge)
-  if (request.url.path == '/api/challenge/${_testDestUser.id}') {
+  if (request.url.path == '/api/challenge/${_testDestUser.id}' ||
+      request.url.path == '/api/challenge/${_testBotUser.id}') {
+    onChallengeCreated?.call();
     return mockResponse(_clockChallengeResponse, 200);
   }
   return mockResponse('', 404);
